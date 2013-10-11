@@ -24,11 +24,8 @@ class NgramLanguageModel implements LanguageModel {
   int ngram = 2;
 
   public double getWordProbability(List<String> sentence, int index) {
-    List<String> preparedSentence = prepareSentence(sentence);
-    double count = wordCounter.getCount(
-      preparedSentence.subList(index - ngram, index - 1),
-      preparedSentence.get(index)
-    );
+    List<String> given = prepareGiven(sentence, index, ngram);
+    double count = wordCounter.getCount(given, sentence.get(index));
     if (count == 0) {
 //      System.out.println("UNKNOWN WORD: "+sentence.get(index));
       return 1.0 / (total + 1.0);
@@ -45,12 +42,22 @@ class NgramLanguageModel implements LanguageModel {
     }
     return probability;
   }
-/*
+
+  private List<String> prepareGiven(List<String> sentence, int index, int grams) {
+    List<String> given = new ArrayList<String>(sentence.subList(Math.max(index - grams + 1, 0), index));
+    while (given.size() < grams - 1) {
+        given.add(0, START);
+    }
+    return given;
+  }
+
   String generateWord(List<String> given) {
     double sample = Math.random();
+
     double sum = 0.0;
-    for (String word : wordCounter.keySet(given)) {
-      sum += wordCounter.getCount(word) / total;
+    Counter<String> counter = wordCounter.getCounter(given);
+    for (String word : counter.keySet()) {
+        sum += counter.getCount(word) / (counter.size() * 1.0);
       if (sum > sample) {
         return word;
       }
@@ -59,18 +66,17 @@ class NgramLanguageModel implements LanguageModel {
   }
 
   public List<String> generateSentence() {
+    int i = 0;
     List<String> sentence = new ArrayList<String>();
-    String word = generateWord();
+    String word = generateWord(prepareGiven(sentence, i, ngram));
     while (!word.equals(STOP)) {
+      i++;
       sentence.add(word);
-      word = generateWord();
+      word = generateWord(prepareGiven(sentence, i, ngram));
     }
     return sentence;
   }
-*/
-  public List<String> generateSentence() {
-    return new ArrayList<String>();
-  }
+
 
   protected List<String> prepareSentence(List<String> sentence) {
     for (int i = 0; i < ngram - 1; i++) {
