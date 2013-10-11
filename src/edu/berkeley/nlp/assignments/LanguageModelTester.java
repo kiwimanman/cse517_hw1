@@ -277,6 +277,7 @@ public class LanguageModelTester {
     String basePath = ".";
     String model = "baseline";
     boolean verbose = false;
+    int ngram = 2;
 
     // Update defaults using command line specifications
 
@@ -299,6 +300,13 @@ public class LanguageModelTester {
     if (argMap.containsKey("-quiet")) {
       verbose = false;
     }
+    if (argMap.containsKey("-n")) {
+      ngram = Integer.parseInt(argMap.get("-n"));
+      System.out.println("With n of: " + ngram);
+      if (ngram > 4 || ngram < 0) {
+        throw new RuntimeException("Invalid ngram value: " + ngram);
+      }
+    }
 
     // Read in all the assignment data
     String trainingSentencesFile = "/treebank-sentences-spoken-train.txt";
@@ -313,10 +321,10 @@ public class LanguageModelTester {
 
     // Build the language model
     LanguageModel languageModel = null;
-    if (model.equalsIgnoreCase("baseline")) {
+    if (model.equalsIgnoreCase("baseline") || ngram == 1) {
       languageModel = new EmpiricalUnigramLanguageModel(trainingSentenceCollection);
-    } else if (model.equalsIgnoreCase("your_model_here")) {
-      // TODO: construct your new language models here
+    } else if (model.equalsIgnoreCase("ngram")) {
+      languageModel = new NgramLanguageModel(trainingSentenceCollection, ngram);
     } else if (model.equalsIgnoreCase("your_model_here")) {
       // TODO: construct your new language models here
     } else {
