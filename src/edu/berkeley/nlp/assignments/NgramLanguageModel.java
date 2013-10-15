@@ -16,20 +16,30 @@ class NgramLanguageModel implements LanguageModel {
 
   static final String STOP  = "</S>";
   static final String START = "<START>";
+  static final List<String> blank_list = new ArrayList<String>();
 
   double total = 0.0;
   Map<Integer, CounterMap<List<String>, String>> wordCounter = new HashMap<Integer, CounterMap<List<String>, String>>();
   int ngram = 2;
-  List<Double> interpolation_vector = null;
+  List<Double> interpolation_vector = new ArrayList<Double>();
 
-  public double getWordProbability(List<String> sentence, int index) {
-    List<String> given = prepareGiven(sentence, index);
-    double count = wordCounter.get(ngram).getCount(given, sentence.get(index));
+  public double getWordProbability(List<String> sentence, int index, int gram) {
+    List<String> given = prepareGiven(sentence, index, gram);
+    double count = wordCounter.get(gram).getCount(given, sentence.get(index));
     if (count == 0) {
-//      System.out.println("UNKNOWN WORD: "+sentence.get(index));
+//    System.out.println("UNKNOWN WORD: "+sentence.get(index));
       return 1.0 / (total + 1.0);
     }
     return count / (total + 1.0);
+  }
+
+  public double getWordProbability(List<String> sentence, int index) {
+    double probability = 0.0;
+    for (int i = ngram; i > 0; i--) {
+      double factor = interpolation_vector.get(i - 1) * getWordProbability(sentence, index, i);
+      probability += factor;
+    }
+    return probability;
   }
 
   public double getSentenceProbability(List<String> sentence) {
@@ -47,11 +57,8 @@ class NgramLanguageModel implements LanguageModel {
   }
 
   private List<String> prepareGiven(List<String> sentence, int index, int grams) {
-    List<String> given = new ArrayList<String>(sentence.subList(Math.max(index - grams + 1, 0), index));
-    while (given.size() < grams - 1) {
-        given.add(0, START);
-    }
-    return given;
+      int start_index = Math.max(0, index - grams + 1);
+      return start_index >= index ? blank_list : sentence.subList(start_index, index);
   }
 
   String generateWord(List<String> given) {
@@ -81,57 +88,45 @@ class NgramLanguageModel implements LanguageModel {
   }
 
 
-  protected List<String> prepareSentence(List<String> sentence, int gram) {
-    for (int i = 0; i < gram - 1; i++) {
-      sentence.add(0, START);
-    }
+  protected List<String> prepareSentence(List<String> sentence) {
     sentence.add(STOP);
     return sentence;
   }
 
-  protected List<String> prepareSentence(List<String> sentence) {
-    return prepareSentence(sentence, ngram);
+  private void countSentences(Collection<List<String>> sentenceCollection) {
+      // Build possible set of counters
+      for (int i = ngram; i > 0; i--) {
+          wordCounter.put(i, new CounterMap<List<String>, String>());
+      }
+
+      // At each index for each ngram, count.
+      for (List<String> sentence : sentenceCollection) {
+          List<String> stoppedSentence = prepareSentence(sentence);
+          for (int gram = ngram; gram > 0; gram--) {
+              for (int i = 0; i < stoppedSentence.size(); i++) {
+                  List<String> given = prepareGiven(stoppedSentence, i ,gram);
+                  wordCounter.get(gram).incrementCount(given, stoppedSentence.get(i), 1.0);
+              }
+          }
+      }
   }
 
   public NgramLanguageModel(Collection<List<String>> sentenceCollection, int ngram) {
-    // Build possible set of counters
-    for (int i = ngram; i > 0; i--) {
-      wordCounter.put(i, new CounterMap<List<String>, String>());
-    }
-    // The basic ngram is simply a special case of the linear one
-    this.interpolation_vector = new ArrayList<Double>(Arrays.asList(1.0));
-    for (int i = 0; i < ngram - 1; i++) {
-        interpolation_vector.add(0.0);
-    }
-    // At each index for each ngram, count.
-    List<String> blank_list = new ArrayList<String>();
-    for (List<String> sentence : sentenceCollection) {
-      for (int gram = ngram; gram > 0; gram--) {
-        List<String> stoppedSentence = prepareSentence(new ArrayList<String>(sentence), gram);
-        for (int i = gram - 1; i < stoppedSentence.size(); i++) {
-          wordCounter.get(gram).incrementCount(
-                gram == 1 ? blank_list : stoppedSentence.subList(i - gram + 1, i),
-                stoppedSentence.get(i),
-                1.0
-          );
-        }
+      // The basic ngram is simply a special case of the linear one
+      for (int i = 0; i < ngram - 1; i++) {
+          interpolation_vector.add(0.0);
       }
-    }
-    total = wordCounter.get(ngram).totalCount();
+      interpolation_vector.add(1.0);
+      this.ngram = ngram;
+
+      countSentences(sentenceCollection);
+      total = wordCounter.get(ngram).totalCount();
   }
 
   public NgramLanguageModel(Collection<List<String>> sentenceCollection, int ngram, List<Double> interpolation_vector) {
     this.interpolation_vector = interpolation_vector;
-    for (List<String> sentence : sentenceCollection) {
-      List<String> stoppedSentence = prepareSentence(new ArrayList<String>(sentence));
-        for (int i = ngram - 1; i < stoppedSentence.size(); i++) {
-          wordCounter.get(ngram).incrementCount(
-                  stoppedSentence.subList(i - ngram + 1, i),
-                  stoppedSentence.get(i),
-                  1.0
-          );
-        }
-      }
+    this.ngram = ngram;
+    countSentences(sentenceCollection);
     total = wordCounter.get(ngram).totalCount();
   }
 }
