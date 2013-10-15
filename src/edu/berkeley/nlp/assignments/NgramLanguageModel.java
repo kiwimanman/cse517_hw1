@@ -15,7 +15,6 @@ import java.util.*;
 class NgramLanguageModel implements LanguageModel {
 
   static final String STOP  = "</S>";
-  static final String START = "<START>";
   static final List<String> blank_list = new ArrayList<String>();
 
   double total = 0.0;
