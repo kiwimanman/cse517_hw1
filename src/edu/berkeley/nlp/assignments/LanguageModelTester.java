@@ -277,6 +277,7 @@ public class LanguageModelTester {
     String basePath = ".";
     String model = "baseline";
     boolean verbose = false;
+    List<Double> interpolation_vector = new ArrayList<Double>();
     int ngram = 2;
 
     // Update defaults using command line specifications
@@ -299,6 +300,9 @@ public class LanguageModelTester {
     }
     if (argMap.containsKey("-quiet")) {
       verbose = false;
+    }
+    if (argMap.containsKey("-vector")) {
+      interpolation_vector = Arrays.asList(1.0, 0.0);
     }
     if (argMap.containsKey("-n")) {
       ngram = Integer.parseInt(argMap.get("-n"));
@@ -325,8 +329,8 @@ public class LanguageModelTester {
       languageModel = new EmpiricalUnigramLanguageModel(trainingSentenceCollection);
     } else if (model.equalsIgnoreCase("ngram")) {
       languageModel = new NgramLanguageModel(trainingSentenceCollection, ngram);
-    } else if (model.equalsIgnoreCase("your_model_here")) {
-      // TODO: construct your new language models here
+    } else if (model.equalsIgnoreCase("linear")) {
+      languageModel = new NgramLanguageModel(trainingSentenceCollection, ngram, interpolation_vector);
     } else {
       throw new RuntimeException("Unknown model descriptor: " + model);
     }
