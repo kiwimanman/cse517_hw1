@@ -20,7 +20,8 @@ class SpeechNBestList {
   }
 
   public double getAcousticScore(List<String> sentence) {
-    return acousticScores.get(sentence);
+      double score = acousticScores.get(sentence);
+      return score;
   }
 
   public SpeechNBestList(List<String> correctSentence, List<List<String>> nBestSentences, Map<List<String>, Double> acousticScores) {
