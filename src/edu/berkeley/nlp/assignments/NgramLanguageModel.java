@@ -14,8 +14,9 @@ import java.util.*;
  */
 class NgramLanguageModel implements LanguageModel {
 
-  static final String STOP  = "</S>";
-  static final List<String> blank_list = new ArrayList<String>();
+  static final String STOP     = "</S>";
+  static final String UNKNOWN  = "*UNKNOWN*";
+  static final List<String> BLANK_LIST = new ArrayList<String>();
 
   double total = 0.0;
   Map<Integer, CounterMap<List<String>, String>> wordCounter = new HashMap<Integer, CounterMap<List<String>, String>>();
@@ -57,7 +58,7 @@ class NgramLanguageModel implements LanguageModel {
 
   private List<String> prepareGiven(List<String> sentence, int index, int grams) {
       int start_index = Math.max(0, index - grams + 1);
-      return start_index >= index ? blank_list : sentence.subList(start_index, index);
+      return start_index >= index ? BLANK_LIST : sentence.subList(start_index, index);
   }
 
   String generateWord(List<String> given) {
@@ -71,7 +72,7 @@ class NgramLanguageModel implements LanguageModel {
         return word;
       }
     }
-    return "*UNKNOWN*";
+    return UNKNOWN;
   }
 
   public List<String> generateSentence() {

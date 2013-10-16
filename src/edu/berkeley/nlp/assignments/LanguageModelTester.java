@@ -301,16 +301,33 @@ public class LanguageModelTester {
     if (argMap.containsKey("-quiet")) {
       verbose = false;
     }
-    if (argMap.containsKey("-vector")) {
-      interpolation_vector = Arrays.asList(1.0, 0.0);
-    }
     if (argMap.containsKey("-n")) {
-      ngram = Integer.parseInt(argMap.get("-n"));
-      System.out.println("With n of: " + ngram);
-      if (ngram > 4 || ngram < 0) {
-        throw new RuntimeException("Invalid ngram value: " + ngram);
+        ngram = Integer.parseInt(argMap.get("-n"));
+        System.out.println("With n of: " + ngram);
+        if (ngram > 4 || ngram < 0) {
+            throw new RuntimeException("Invalid ngram value: " + ngram);
+        }
+    }
+    if (argMap.containsKey("-vector")) {
+      List<String> stringVector = Arrays.asList(argMap.get("-vector").split(","));
+      for (String entry : stringVector) {
+          interpolation_vector.add(Double.parseDouble(entry));
+      }
+      double sum = 0.0;
+      for (double entry : interpolation_vector) {
+          if (entry < 0) {
+              throw new RuntimeException("Vector is invalid. Cannot be negative: " + entry);
+          }
+          sum += entry;
+      }
+      if (sum != 1.0) {
+          throw new RuntimeException("Vector does not sum to 1");
+      }
+      if (interpolation_vector.size() != ngram) {
+          throw new RuntimeException("Vector size is invalid. Must match ngram");
       }
     }
+
 
     // Read in all the assignment data
     String trainingSentencesFile = "/treebank-sentences-spoken-train.txt";
