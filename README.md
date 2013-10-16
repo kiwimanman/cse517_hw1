@@ -46,18 +46,35 @@ List of args
     Turns on searching for ideal parameters and then uses the best one. Using with a vector will start the search at the vector and when used with b will search all b values from 0.1 to 0.9 in steps of 0.1.
     
     
-Example args lists
+How to replicate experimental run:
 ------------------
 
 These do not include the path param:
 
-```-model ngram -n 3```
+```
+-model baseline
+-model ngram -n 1
+-model ngram -n 2
+-model ngram -n 3
+-model ngram -n 4
+# These perform random searches and may find different ideal points
+-model linear -n 2 -vector 0.1,0.9 -search
+-model linear -n 3 -vector 0.05,0.1,0.85 -search 
+-model linear -n 4 -vector 0.05,0.1,0.1,0.75 -search 
+# Actual reported values
+-model linear -n 2 -vector 0.01,0.99
+-model linear -n 3 -vector 0.02,0.1,0.97
+-model linear -n 4 -vector 0.05,0.4,0.1,0.81
+# These performa deterministic search and should replicate
+-model smooth -n 2 -vector -b 0.8 -search
+-model smooth -n 3 -vector -b 0.8 -search 
+-model smooth -n 4 -vector -b 0.8 -search
+# Actual reported values
+-model smooth -n 2 -vector -b 0.7
+-model smooth -n 3 -vector -b 0.8
+-model smooth -n 4 -vector -b 0.8
+```
 
-```-model linear -n 4 -vector 0.05,0.1,0.1,0.75 -search```
+STDOUT will contain all reported values.
 
-    Performs a search from the starting vector and will likely test with a better one
-    
-```-model smooth -n 2 -b 0.7```
-
-```-model smooth -n 3 -b 0.7 -search```
-
+Raw tables and graphs are [here](https://docs.google.com/spreadsheet/ccc?key=0AoSiSS-NuIAQdHp5cW9icnpNZWNTdTVNand5RVhWY2c&usp=sharing).
