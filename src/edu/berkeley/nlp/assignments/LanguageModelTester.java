@@ -2,6 +2,7 @@ package edu.berkeley.nlp.assignments;
 
 import edu.berkeley.nlp.langmodel.LanguageModel;
 import edu.berkeley.nlp.util.CommandLineUtils;
+import edu.berkeley.nlp.util.CounterMap;
 
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
@@ -141,19 +142,26 @@ public class LanguageModelTester {
   static double calculatePerplexity(LanguageModel languageModel, Collection<List<String>> sentenceCollection) {
     double logProbability = 0.0;
     double numSymbols = 0.0;
+    int counter = 0;
     for (List<String> sentence : sentenceCollection) {
       logProbability += Math.log(languageModel.getSentenceProbability(sentence)) / Math.log(2.0);
       numSymbols += sentence.size();
+      counter++;
+      if (counter % 50 == 0) {
+          //System.out.println(counter + '/' + sentenceCollection.size());
+      }
     }
     double avgLogProbability = logProbability / numSymbols;
     double perplexity = Math.pow(0.5, avgLogProbability);
     return perplexity;
   }
 
-    static double calculateLogLikelyHood(LanguageModel languageModel, Collection<List<String>> sentenceCollection) {
+    static double calculateLogLikelyHood(LanguageModel languageModel, CounterMap<List<String>, String> validationSentenceCounts) {
         double logProbability = 0.0;
-        for (List<String> sentence : sentenceCollection) {
-            logProbability += Math.log(languageModel.getSentenceProbability(sentence));
+        for (List<String> given : validationSentenceCounts.keySet()) {
+            for (String word : validationSentenceCounts.getCounter(given).keySet()) {
+                logProbability += validationSentenceCounts.getCount(given, word) * Math.log(languageModel.getWordProbability(given,word));
+            }
         }
         return logProbability;
     }
@@ -171,7 +179,7 @@ public class LanguageModelTester {
       for (List<String> guess : speechNBestList.getNBestSentences()) {
         double languageModelScore = languageModel.getSentenceProbability(guess);
         double acousticScore = speechNBestList.getAcousticScore(guess) / 16.0;
-        double score = Math.log(languageModelScore + acousticScore);
+        double score = Math.log(languageModelScore) + acousticScore;
         double distance = editDistance.getDistance(correctSentence, guess);
         if (score == bestScore) {
           numWithBestScores += 1.0;
@@ -279,6 +287,30 @@ public class LanguageModelTester {
     return vocabulary;
   }
 
+  public static  List<String> prepareSentence(List<String> sentence) {
+      List<String> stoppedSentence =  new ArrayList<String>(sentence);
+      stoppedSentence.add(NgramLanguageModel.STOP);
+      return stoppedSentence;
+  }
+
+    public static List<String> prepareGiven(List<String> sentence, int index, int grams) {
+        int start_index = Math.max(0, index - grams + 1);
+        return start_index >= index ? NgramLanguageModel.BLANK_LIST : sentence.subList(start_index, index);
+    }
+
+  public static CounterMap<List<String>, String> count_validation(Collection<List<String>> sentenceCollection, int ngram) {
+      CounterMap<List<String>, String> counter = new CounterMap<List<String>, String>();
+
+      for (List<String> sentence : sentenceCollection) {
+          List<String> stoppedSentence = prepareSentence(sentence);
+          for (int i = 0; i < stoppedSentence.size(); i++) {
+              List<String> given = prepareGiven(stoppedSentence, i , ngram);
+              counter.incrementCount(given, stoppedSentence.get(i), 1.0);
+          }
+      }
+      return counter;
+    }
+
   public static void main(String[] args) throws IOException {
     // Parse command line flags and arguments
     Map<String, String> argMap = CommandLineUtils.simpleCommandLineParser(args);
@@ -287,6 +319,7 @@ public class LanguageModelTester {
     String basePath = ".";
     String model = "baseline";
     boolean verbose = false;
+    double beta = 0.0;
     List<Double> interpolation_vector = new ArrayList<Double>();
     int ngram = 2;
 
@@ -311,6 +344,10 @@ public class LanguageModelTester {
     if (argMap.containsKey("-quiet")) {
       verbose = false;
     }
+    if (argMap.containsKey("-b")) {
+        beta = Double.parseDouble(argMap.get("-b"));
+    }
+
     if (argMap.containsKey("-n")) {
         ngram = Integer.parseInt(argMap.get("-n"));
         System.out.println("With n of: " + ngram);
@@ -358,15 +395,68 @@ public class LanguageModelTester {
       languageModel = new NgramLanguageModel(trainingSentenceCollection, ngram);
     } else if (model.equalsIgnoreCase("linear")) {
       languageModel = new NgramLanguageModel(trainingSentenceCollection, ngram, interpolation_vector);
+    } else if (model.equalsIgnoreCase("smooth")) {
+        languageModel = new SmoothedNgramLanguageModel(trainingSentenceCollection, ngram, beta);
     } else {
       throw new RuntimeException("Unknown model descriptor: " + model);
     }
 
     // Validation
-    double validationLogLikelyHood = calculateLogLikelyHood(languageModel, validationSentenceCollection);
-    System.out.println("Validation Set Likelyhood:  " + validationLogLikelyHood);
+    System.out.println("Validation phase:");
+    //double validationLogLikelyHood = calculateLogLikelyHood(languageModel, validationSentenceCollection);
+    //System.out.println("Validation Set Likelyhood:  " + validationLogLikelyHood);
+    CounterMap<List<String>, String> validationSentenceCounts = count_validation(validationSentenceCollection, ngram);
+
+    // Searches randomly around vector looking for max log likelyhood over sentence, ends by assigning model the best one found.
+    if (argMap.containsKey("-search") && argMap.containsKey("-vector")) {
+        double maxLikelyhood = Double.NEGATIVE_INFINITY;
+        double score;
+        double step = 0.03;
+        Set<List<Double>> closed_set = new HashSet<List<Double>>();
+        List<Double> best_vector = interpolation_vector;
+        List<Double> test_vector = new ArrayList<Double>(best_vector);
+        Random r = new Random();
+        for (int i = 0; i < 200; i++) {
+          languageModel.setInterpolationVector(test_vector);
+          score = calculateLogLikelyHood(languageModel, validationSentenceCounts);
+          if (maxLikelyhood < score)   {
+            best_vector = test_vector;
+            maxLikelyhood = score;
+          }
+          test_vector = new ArrayList<Double>(test_vector);
+          while (closed_set.contains(test_vector)) {
+            int take_index = r.nextInt(test_vector.size());
+            int give_index = r.nextInt(test_vector.size());
+            if (test_vector.get(take_index) > step) {
+              test_vector.set(take_index, test_vector.get(take_index) - step);
+              test_vector.set(give_index, test_vector.get(give_index) + step);
+            }
+          }
+          closed_set.add(test_vector);
+        }
+        System.out.println("Best vector found: " + best_vector);
+        System.out.println("Score: " + maxLikelyhood);
+        languageModel.setInterpolationVector(best_vector);
+    }
+
+    if (argMap.containsKey("-search") && argMap.containsKey("-b")) {
+        double score = Double.NEGATIVE_INFINITY;
+        double foundBeta = 0.1;
+        for (double testBeta = 0.1; testBeta < 1; testBeta += 0.1) {
+            languageModel.setBeta(testBeta);
+            double testScore = calculateLogLikelyHood(languageModel, validationSentenceCounts);
+            if (score < testScore) {
+                foundBeta = testBeta;
+                score = testScore;
+            }
+            System.out.println(testBeta + ": " + score);
+        }
+        System.out.println("Using beta: " + foundBeta);
+        languageModel.setBeta(foundBeta);
+    }
 
     // Evaluate the language model
+    System.out.println("Model created, running tests....");
     double wsjPerplexity = calculatePerplexity(languageModel, testSentenceCollection);
     double hubPerplexity = calculatePerplexity(languageModel, extractCorrectSentenceList(speechNBestLists));
     System.out.println("WSJ Perplexity:  " + wsjPerplexity);
@@ -378,7 +468,11 @@ public class LanguageModelTester {
     double wordErrorRate = calculateWordErrorRate(languageModel, speechNBestLists, verbose);
     System.out.println("HUB Word Error Rate: " + wordErrorRate);
     System.out.println("Generated Sentences:");
-    for (int i = 0; i < 10; i++)
-      System.out.println("  " + languageModel.generateSentence());
+    if (model.equalsIgnoreCase("linear")) {
+        System.out.println("There is a concurrent access exception I have been unable to track down and this part doesn't work");
+    } else {
+      for (int i = 0; i < 10; i++)
+        System.out.println("  " + languageModel.generateSentence());
+    }
   }
 }

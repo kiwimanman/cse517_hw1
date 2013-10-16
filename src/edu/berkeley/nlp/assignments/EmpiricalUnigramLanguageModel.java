@@ -16,18 +16,31 @@ import java.util.List;
 class EmpiricalUnigramLanguageModel implements LanguageModel {
 
   static final String STOP = "</S>";
+  static final List<String> BLANK_GIVEN = new ArrayList<String>();
 
   double total = 0.0;
   Counter<String> wordCounter = new Counter<String>();
 
-  public double getWordProbability(List<String> sentence, int index) {
-    String word = sentence.get(index);
-    double count = wordCounter.getCount(word);
-    if (count == 0) {
+  public void setInterpolationVector(List<Double> value) {
+      return;
+  }
+
+  public void setBeta(double value) {
+      return;
+  }
+
+  public double getWordProbability(List<String> given, String word) {
+        double count = wordCounter.getCount(word);
+        if (count == 0) {
 //      System.out.println("UNKNOWN WORD: "+sentence.get(index));
-      return 1.0 / (total + 1.0);
-    }
-    return count / (total + 1.0);
+            return 1.0 / (total + 1.0);
+        }
+        return count / (total + 1.0);
+  }
+
+  public double getWordProbability(List<String> sentence, int index) {
+      String word = sentence.get(index);
+      return getWordProbability(BLANK_GIVEN, word);
   }
 
   public double getSentenceProbability(List<String> sentence) {
