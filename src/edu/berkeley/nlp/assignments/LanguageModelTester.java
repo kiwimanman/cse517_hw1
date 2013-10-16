@@ -150,6 +150,14 @@ public class LanguageModelTester {
     return perplexity;
   }
 
+    static double calculateLogLikelyHood(LanguageModel languageModel, Collection<List<String>> sentenceCollection) {
+        double logProbability = 0.0;
+        for (List<String> sentence : sentenceCollection) {
+            logProbability += Math.log(languageModel.getSentenceProbability(sentence));
+        }
+        return logProbability;
+    }
+
   static double calculateWordErrorRate(LanguageModel languageModel, List<SpeechNBestList> speechNBestLists, boolean verbose) {
     double totalDistance = 0.0;
     double totalWords = 0.0;
@@ -161,7 +169,9 @@ public class LanguageModelTester {
       double numWithBestScores = 0.0;
       double distanceForBestScores = 0.0;
       for (List<String> guess : speechNBestList.getNBestSentences()) {
-        double score = Math.log(languageModel.getSentenceProbability(guess)) + (speechNBestList.getAcousticScore(guess) / 16.0);
+        double languageModelScore = languageModel.getSentenceProbability(guess);
+        double acousticScore = speechNBestList.getAcousticScore(guess) / 16.0;
+        double score = Math.log(languageModelScore + acousticScore);
         double distance = editDistance.getDistance(correctSentence, guess);
         if (score == bestScore) {
           numWithBestScores += 1.0;
@@ -351,6 +361,10 @@ public class LanguageModelTester {
     } else {
       throw new RuntimeException("Unknown model descriptor: " + model);
     }
+
+    // Validation
+    double validationLogLikelyHood = calculateLogLikelyHood(languageModel, validationSentenceCollection);
+    System.out.println("Validation Set Likelyhood:  " + validationLogLikelyHood);
 
     // Evaluate the language model
     double wsjPerplexity = calculatePerplexity(languageModel, testSentenceCollection);

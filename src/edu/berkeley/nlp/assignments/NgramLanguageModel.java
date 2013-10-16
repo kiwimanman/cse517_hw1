@@ -18,42 +18,47 @@ class NgramLanguageModel implements LanguageModel {
   static final String UNKNOWN  = "*UNKNOWN*";
   static final List<String> BLANK_LIST = new ArrayList<String>();
 
-  double total = 0.0;
   Map<Integer, CounterMap<List<String>, String>> wordCounter = new HashMap<Integer, CounterMap<List<String>, String>>();
   int ngram = 2;
   List<Double> interpolation_vector = new ArrayList<Double>();
 
   public double getWordProbability(List<String> sentence, int index, int gram) {
-    List<String> given = prepareGiven(sentence, index, gram);
-    double count = wordCounter.get(gram).getCount(given, sentence.get(index));
-    if (count == 0) {
-//    System.out.println("UNKNOWN WORD: "+sentence.get(index));
-      return 1.0 / (total + 1.0);
-    }
-    return count / (total + 1.0);
+      List<String> given;
+      CounterMap<List<String>, String> counter;
+      double count;
+      double total;
+
+      given = prepareGiven(sentence, index, gram);
+      counter = wordCounter.get(gram);
+      count = counter.getCount(given, sentence.get(index));
+      total = counter.getCounter(given).totalCount();
+
+      if (count == 0) {
+//      System.out.println("UNKNOWN WORD: "+sentence.get(index));
+        return 1.0 / (total + 1.0);
+      }
+      return count / (total + 1.0);
   }
 
   public double getWordProbability(List<String> sentence, int index) {
     double probability = 0.0;
-    for (int i = ngram; i > 0; i--) {
+    for (int i = 1; i <= ngram; i++) {
       double factor = interpolation_vector.get(i - 1) * getWordProbability(sentence, index, i);
       probability += factor;
+    }
+    if (probability == 0.0) {
+        System.out.println("Possible underflow situation");
     }
     return probability;
   }
 
   public double getSentenceProbability(List<String> sentence) {
-    List<String> stoppedSentence = new ArrayList<String>(sentence);
-    stoppedSentence.add(STOP);
+    List<String> stoppedSentence = prepareSentence(sentence);
     double probability = 1.0;
     for (int index = 0; index < stoppedSentence.size(); index++) {
       probability *= getWordProbability(stoppedSentence, index);
     }
     return probability;
-  }
-
-  private List<String> prepareGiven(List<String> sentence, int index) {
-      return prepareGiven(sentence, index, ngram);
   }
 
   private List<String> prepareGiven(List<String> sentence, int index, int grams) {
@@ -62,6 +67,18 @@ class NgramLanguageModel implements LanguageModel {
   }
 
   String generateWord(List<String> given) {
+      double sample = Math.random();
+      double sum = 0.0;
+      for (int i = 1; i <= ngram; i++) {
+          sum += interpolation_vector.get(i - 1);
+          if (sum > sample) {
+              return generateWord(given, i);
+          }
+      }
+      return "*UNKNOWN*";
+  }
+
+  String generateWord(List<String> given, int ngram) {
     double sample = Math.random();
 
     double sum = 0.0;
@@ -89,8 +106,9 @@ class NgramLanguageModel implements LanguageModel {
 
 
   protected List<String> prepareSentence(List<String> sentence) {
-    sentence.add(STOP);
-    return sentence;
+    List<String> stoppedSentence =  new ArrayList<String>(sentence);
+    stoppedSentence.add(STOP);
+    return stoppedSentence;
   }
 
   private void countSentences(Collection<List<String>> sentenceCollection) {
@@ -120,13 +138,11 @@ class NgramLanguageModel implements LanguageModel {
       this.ngram = ngram;
 
       countSentences(sentenceCollection);
-      total = wordCounter.get(ngram).totalCount();
   }
 
   public NgramLanguageModel(Collection<List<String>> sentenceCollection, int ngram, List<Double> interpolation_vector) {
     this.interpolation_vector = interpolation_vector;
     this.ngram = ngram;
     countSentences(sentenceCollection);
-    total = wordCounter.get(ngram).totalCount();
   }
 }
